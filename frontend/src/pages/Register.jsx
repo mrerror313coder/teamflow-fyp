@@ -48,7 +48,7 @@ const Register = () => {
         navigate('/member-dashboard');
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Registration failed');
+      toast.error(err.response?.data?.message || err.message || 'Registration failed');
     } finally {
       setLoading(false);
     }

@@ -1,7 +1,11 @@
 import axios from 'axios';
 
+// In production (Render all-in-one deploy), relative '/api' automatically targets the live URL.
+// In local development, Vite proxies '/api' to http://localhost:5000.
+const baseURL = import.meta.env.VITE_API_URL || '/api';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },

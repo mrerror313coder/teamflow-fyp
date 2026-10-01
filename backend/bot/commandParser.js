@@ -18,6 +18,8 @@ const {
 const { calculateProjectProgress } = require('../utils/progressCalc');
 const { notifyTaskAssigned } = require('../utils/notifications');
 
+const DASHBOARD_URL = process.env.APP_URL || process.env.FRONTEND_URL || 'https://teamflow-fyp.onrender.com';
+
 /**
  * Main dispatcher for incoming WhatsApp bot messages with STRICT Access Control & English conversation
  */
@@ -74,7 +76,7 @@ const handleIncomingMessage = async (senderPhone, rawMessage, options = {}) => {
   if (lower.startsWith('verify') || lower.startsWith('linkaccount') || lower.startsWith('linkphone')) {
     const code = prefix.replace(/^(verify|linkaccount|linkphone)/i, '').trim();
     if (!code) {
-      return `⚠️ *Usage:* !verify <your-6-digit-pin>\n*Example:* !verify 482910\n\n👉 Log in to your TeamFlow Dashboard (http://localhost:5173) to see your secret 6-digit WhatsApp Link PIN.`;
+      return `⚠️ *Usage:* !verify <your-6-digit-pin>\n*Example:* !verify 482910\n\n👉 Log in to your TeamFlow Dashboard (${DASHBOARD_URL}) to see your secret 6-digit WhatsApp Link PIN.`;
     }
 
     // Check if input is a 6-digit PIN
@@ -88,7 +90,7 @@ For privacy and account security, accounts CANNOT be linked using phone numbers,
 
 👉 *How to securely link your WhatsApp account:*
 1. Log in to your TeamFlow Web Dashboard:
-   http://localhost:5173/login
+   ${DASHBOARD_URL}/login
 2. Look at the top of your Dashboard to see your private 6-digit *WhatsApp Link PIN*.
 3. Reply here with:
    *!verify <your-6-digit-pin>*
@@ -98,7 +100,7 @@ For privacy and account security, accounts CANNOT be linked using phone numbers,
     const matchedUser = await User.findOne({ whatsappPin: code });
 
     if (!matchedUser) {
-      return `❌ *Invalid or Expired PIN*\nNo TeamFlow account was found with the PIN "${code}".\nPlease check your current 6-digit PIN on your TeamFlow Web Dashboard: http://localhost:5173`;
+      return `❌ *Invalid or Expired PIN*\nNo TeamFlow account was found with the PIN "${code}".\nPlease check your current 6-digit PIN on your TeamFlow Web Dashboard: ${DASHBOARD_URL}`;
     }
 
     // Link this WhatsApp account / LID to the user profile
@@ -200,7 +202,7 @@ Only verified FYP group members can view project progress and tasks.
    _Example: !join TF-H81TT_
 
 3. Or register an account on the Web Dashboard:
-   http://localhost:5173/register`;
+   ${DASHBOARD_URL}/register`;
   }
 
   // If user is registered but has no project assigned:
@@ -211,7 +213,7 @@ Hello *${user.name}*! You are registered on TeamFlow, but not currently assigned
 
 Please ask your Project Leader for your group's Invite Code and reply:
 *!join <inviteCode>* (e.g. !join TF-XXXXX)
-or join via the Web Dashboard: http://localhost:5173`;
+or join via the Web Dashboard: ${DASHBOARD_URL}`;
   }
 
   // 6. PROJECT ISOLATION VERIFICATION:

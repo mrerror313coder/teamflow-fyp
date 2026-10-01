@@ -34,8 +34,15 @@ exports.register = async (req, res) => {
 
     const Project = require('../models/Project');
     let matchedProject = null;
-    if (req.body.inviteCode) {
-      matchedProject = await Project.findOne({ inviteCode: req.body.inviteCode.trim().toUpperCase() });
+    if (req.body.inviteCode && req.body.inviteCode.trim()) {
+      const code = req.body.inviteCode.trim().toUpperCase();
+      matchedProject = await Project.findOne({ inviteCode: code });
+      if (!matchedProject) {
+        return res.status(400).json({
+          success: false,
+          message: `Project Invite Code "${code}" was not found. Please verify the code with your Project Leader or clear the field to register without a group.`,
+        });
+      }
     }
 
     const user = await User.create({
@@ -48,8 +55,10 @@ exports.register = async (req, res) => {
     });
 
     if (matchedProject) {
-      matchedProject.members.push(user._id);
-      await matchedProject.save();
+      if (!matchedProject.members.some(m => m.toString() === user._id.toString())) {
+        matchedProject.members.push(user._id);
+        await matchedProject.save();
+      }
     }
 
     const token = generateToken(user._id);
