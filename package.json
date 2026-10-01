@@ -2,16 +2,38 @@
   "name": "teamflow-fyp",
   "version": "1.0.0",
   "description": "TeamFlow - WhatsApp-integrated AI-powered group task management system for university students",
+  "main": "backend/server.js",
   "scripts": {
     "start": "node backend/server.js",
     "build": "npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install",
+    "postinstall": "npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install",
     "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"blue,magenta\" \"npm.cmd --prefix backend run dev\" \"npm.cmd --prefix frontend run dev\"",
     "backend": "npm.cmd --prefix backend run dev",
     "frontend": "npm.cmd --prefix frontend run dev",
     "clean": "node backend/scripts/cleanDatabase.js",
     "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install"
   },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.0",
+    "@whiskeysockets/baileys": "^6.7.13",
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.5.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.12.1",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  },
   "devDependencies": {
     "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
