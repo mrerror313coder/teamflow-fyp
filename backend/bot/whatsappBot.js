@@ -5,7 +5,6 @@ const {
   fetchLatestBaileysVersion,
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const qrcodeTerminal = require('qrcode-terminal');
 const QRCode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
@@ -13,7 +12,9 @@ const fs = require('fs');
 let sock = null;
 let currentQR = null;
 let currentQRImage = null;
+let currentQRBuffer = null;
 let connectionStatus = 'disconnected'; // 'disconnected' | 'connecting' | 'qr_ready' | 'connected'
+let reconnectTimer = null;
 
 const AUTH_FOLDER = path.join(__dirname, '../whatsapp-auth');
 
@@ -23,6 +24,8 @@ const getBotStatus = () => ({
   qrDataUrl: currentQRImage,
   qrRaw: currentQR,
 });
+
+const getQrBuffer = () => currentQRBuffer;
 
 const isConnected = () => connectionStatus === 'connected' && !!sock;
 
@@ -43,10 +46,69 @@ const sendWhatsAppMessage = async (phoneNumber, text) => {
   }
 };
 
-const startBot = async () => {
+/**
+ * Request an 8-character Pairing Code for seamless phone linking (No QR scanning needed!)
+ */
+const requestPairingCode = async (phoneNumber) => {
+  if (!phoneNumber) throw new Error('Phone number is required');
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+
+  if (connectionStatus === 'connected') {
+    throw new Error('WhatsApp Bot is already connected!');
+  }
+
+  // Ensure socket is active and ready
+  if (!sock || connectionStatus === 'disconnected') {
+    await startBot(true);
+    // Brief handshake wait
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  if (!sock) {
+    throw new Error('Could not initialize WhatsApp socket. Please try again.');
+  }
+
+  try {
+    const code = await sock.requestPairingCode(cleanPhone);
+    console.log(`🔑 Generated WhatsApp Pairing Code for +${cleanPhone}: ${code}`);
+    return code;
+  } catch (err) {
+    console.error('Pairing code request error:', err.message);
+    throw err;
+  }
+};
+
+const startBot = async (forceRestart = false) => {
   if (process.env.WHATSAPP_BOT_ENABLED === 'false') {
     console.log('ℹ️ WhatsApp Bot disabled via WHATSAPP_BOT_ENABLED=false');
-    return;
+    return null;
+  }
+
+  // Clear pending reconnect timer
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  // Cleanly close existing socket instance
+  if (sock) {
+    try {
+      sock.ev.removeAllListeners();
+      sock.end();
+    } catch (e) {}
+    sock = null;
+  }
+
+  // If force restart and not connected, clear stale auth lock files
+  if (forceRestart && connectionStatus !== 'connected') {
+    try {
+      if (fs.existsSync(AUTH_FOLDER)) {
+        fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+        console.log('🧹 Cleaned stale WhatsApp session folder for fresh pairing.');
+      }
+    } catch (e) {
+      console.warn('Could not clean auth folder:', e.message);
+    }
   }
 
   try {
@@ -55,18 +117,20 @@ const startBot = async () => {
     }
 
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
-    const { version, isLatest } = await fetchLatestBaileysVersion();
-    console.log(` Starting WhatsApp Bot with Baileys v${version.join('.')}`);
+    const { version } = await fetchLatestBaileysVersion();
+    console.log(`🚀 Starting WhatsApp Bot with Baileys v${version.join('.')}`);
 
     connectionStatus = 'connecting';
 
     sock = makeWASocket({
       version,
-      logger: pino({ level: 'silent' }), // Keep terminal clean
+      logger: pino({ level: 'silent' }), // Keep server logs clean
       printQRInTerminal: false,
       auth: state,
       browser: ['TeamFlow FYP', 'Chrome', '1.0.0'],
       syncFullHistory: false,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -77,15 +141,13 @@ const startBot = async () => {
       if (qr) {
         currentQR = qr;
         connectionStatus = 'qr_ready';
-        console.log('\n=========================================');
-        console.log('📱 SCAN THIS WHATSAPP QR CODE TO CONNECT:');
-        console.log('=========================================');
-        qrcodeTerminal.generate(qr, { small: true });
+        console.log('📱 WhatsApp QR Code generated & ready for scanning in dashboard!');
 
         try {
-          currentQRImage = await QRCode.toDataURL(qr);
+          currentQRImage = await QRCode.toDataURL(qr, { width: 320, margin: 2 });
+          currentQRBuffer = await QRCode.toBuffer(qr, { width: 400, margin: 2 });
         } catch (e) {
-          currentQRImage = null;
+          console.error('Error creating QR image:', e);
         }
       }
 
@@ -95,18 +157,20 @@ const startBot = async () => {
         connectionStatus = 'disconnected';
         currentQR = null;
         currentQRImage = null;
+        currentQRBuffer = null;
         console.log(`⚠️ WhatsApp connection closed (code: ${statusCode}). Reconnecting: ${shouldReconnect}`);
 
         if (shouldReconnect) {
-          setTimeout(() => startBot(), 5000);
+          reconnectTimer = setTimeout(() => startBot(false), 5000);
         }
       } else if (connection === 'open') {
         connectionStatus = 'connected';
         currentQR = null;
         currentQRImage = null;
-        console.log(' WhatsApp Bot Connected & Listening for Commands!');
+        currentQRBuffer = null;
+        console.log('✅ WhatsApp Bot Connected & Listening for Commands!');
 
-        // Send a welcome message directly to the linked account's chat ("Message yourself")
+        // Greet connected user
         try {
           const rawId = sock.user?.id || '';
           const connectedPhone = rawId.split(':')[0]?.replace(/\D/g, '');
@@ -120,19 +184,17 @@ Welcome! Your TeamFlow WhatsApp Bot is now active and listening for commands.
 You can test commands directly in this chat:
 • *!progress* — Overall project progress report
 • *!mytasks* — Your personal pending tasks & deadlines
-• *!insight* — Gemini AI risk assessment & suggestions
+• *!ai <question>* — Ask the AI Project Copilot
 • *!roadmap* — Project milestones & phases
 • *!overdue* — List of late deliverables
 • *!help* — View all available commands
 
-👥 *Group Chats:* You can also add me to your FYP WhatsApp Group and send *!linkgroup* to link your workspace! 🚀`,
+👥 *Group Chats:* Add me to your FYP WhatsApp Group and send *!linkgroup* to link your workspace! 🚀`,
             });
-            console.log(` Sent welcome message to linked account: +${connectedPhone}`);
+            console.log(`📢 Sent welcome message to linked account: +${connectedPhone}`);
 
-            // Automatically sync the Leader's phone number in MongoDB
             const User = require('../models/User');
             await User.findOneAndUpdate({ role: 'leader' }, { phone: connectedPhone });
-            console.log(` Synced Leader profile phone to +${connectedPhone}`);
           }
         } catch (greetErr) {
           console.error('Error sending WhatsApp welcome message:', greetErr.message);
@@ -156,7 +218,6 @@ You can test commands directly in this chat:
             msg.message?.imageMessage?.caption ||
             '';
 
-          // Strictly only respond to commands starting with "!"
           if (!text || !text.trim().startsWith('!')) continue;
 
           const isGroup = remoteJid.endsWith('@g.us');
@@ -164,7 +225,6 @@ You can test commands directly in this chat:
             ? (msg.key.participant || msg.participant || '')
             : remoteJid;
 
-          // Check if WhatsApp sent a Phone Number Alt JID for this sender (LID resolution)
           let pnJid = isGroup ? msg.key?.participantAlt : msg.key?.remoteJidAlt;
           if (!pnJid && (senderJid.endsWith('@lid') || senderJid.length >= 18)) {
             try {
@@ -172,11 +232,9 @@ You can test commands directly in this chat:
             } catch (e) {}
           }
 
-          // Strip device suffix (:1, :15, etc.) and domain
           const rawUser = (pnJid || senderJid || '').split('@')[0].split(':')[0];
           const senderPhone = rawUser.replace(/\D/g, '');
 
-          // Check if sender is using an internal WhatsApp LID
           const senderLid = senderJid.includes('@lid') || (!pnJid && senderPhone.length >= 14)
             ? senderJid.split('@')[0].split(':')[0]
             : null;
@@ -196,7 +254,6 @@ You can test commands directly in this chat:
           const reply = await handleIncomingMessage(senderPhone, text.trim(), options);
 
           if (reply) {
-            // Reply directly to the chat, quoting the trigger message
             await sock.sendMessage(remoteJid, { text: reply }, { quoted: msg });
           }
         }
@@ -219,6 +276,8 @@ module.exports = {
   startBot,
   sendWhatsAppMessage,
   getBotStatus,
+  getQrBuffer,
+  requestPairingCode,
   isConnected,
   getWhatsAppSocket,
 };
