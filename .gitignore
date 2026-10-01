@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment variables
+.env
+backend/.env
+frontend/.env
+*.env.local
+
+# Baileys WhatsApp Authentication Session (Keep Private!)
+backend/whatsapp-auth/
+whatsapp-auth/
+
+# Production build output
+frontend/dist/
+dist/
+
+# Uploads & Temp storage
+backend/uploads/
+uploads/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System files
+.DS_Store
+Thumbs.db

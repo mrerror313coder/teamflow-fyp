@@ -1,0 +1,17 @@
+{
+  "name": "teamflow-fyp",
+  "version": "1.0.0",
+  "description": "TeamFlow - WhatsApp-integrated AI-powered group task management system for university students",
+  "scripts": {
+    "start": "node backend/server.js",
+    "build": "npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install",
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"blue,magenta\" \"npm.cmd --prefix backend run dev\" \"npm.cmd --prefix frontend run dev\"",
+    "backend": "npm.cmd --prefix backend run dev",
+    "frontend": "npm.cmd --prefix frontend run dev",
+    "clean": "node backend/scripts/cleanDatabase.js",
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

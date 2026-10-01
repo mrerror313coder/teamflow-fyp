@@ -1,0 +1,5 @@
+{
+  "watch": ["server.js", "controllers", "routes", "models", "config", "bot", "utils"],
+  "ignore": ["whatsapp-auth/**", "uploads/**", "*.log"],
+  "ext": "js,json"
+}
