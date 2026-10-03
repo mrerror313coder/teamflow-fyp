@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast';
 
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
 import LeaderDashboard from './pages/LeaderDashboard';
 import MemberDashboard from './pages/MemberDashboard';
 import NotFound from './pages/NotFound';
@@ -78,6 +79,8 @@ function App() {
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ForgotPassword />} />
           
           <Route
             path="/leader-dashboard"

@@ -46,6 +46,16 @@ const userSchema = new mongoose.Schema(
       default: () => Math.floor(100000 + Math.random() * 900000).toString(),
       index: true,
     },
+    resetPasswordOtp: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    resetPasswordOtpExpire: {
+      type: Date,
+      default: null,
+      select: false,
+    },
   },
   {
     timestamps: true,

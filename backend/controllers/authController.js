@@ -205,3 +205,194 @@ exports.getMembers = async (req, res) => {
     });
   }
 };
+
+// @desc    Request password reset OTP (sent via WhatsApp bot)
+// @route   POST /api/auth/forgot-password
+// @access  Public
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { identifier } = req.body;
+
+    if (!identifier || !identifier.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide your registered Email or WhatsApp phone number.',
+      });
+    }
+
+    const trimmed = identifier.trim();
+    let user = null;
+
+    if (trimmed.includes('@')) {
+      user = await User.findOne({ email: trimmed.toLowerCase() }).select('+password +resetPasswordOtp +resetPasswordOtpExpire');
+    } else {
+      const digits = trimmed.replace(/\D/g, '');
+      const searchSuffix = digits.slice(-9);
+      user = await User.findOne({
+        $or: [
+          { phone: digits },
+          { phone: digits.startsWith('0') ? '92' + digits.slice(1) : digits },
+          { phone: { $regex: searchSuffix + '$' } },
+        ],
+      }).select('+password +resetPasswordOtp +resetPasswordOtpExpire');
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account found with this email or WhatsApp phone number.',
+      });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.resetPasswordOtp = otp;
+    user.resetPasswordOtpExpire = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+    await user.save();
+
+    // Mask phone number for privacy display (e.g. 92305••••301)
+    const rawPhone = user.phone || '';
+    const maskedPhone = rawPhone.length > 5
+      ? rawPhone.slice(0, 4) + '••••' + rawPhone.slice(-3)
+      : rawPhone;
+
+    // Send via WhatsApp bot if connected
+    let whatsappSent = false;
+    try {
+      const { isConnected, sendWhatsAppMessage } = require('../bot/whatsappBot');
+      if (isConnected && isConnected()) {
+        const resetUrl = `${process.env.APP_URL || 'https://teamflow-fyp.onrender.com'}/forgot-password?identifier=${encodeURIComponent(user.email)}`;
+        const message = `🔐 *TEAMFLOW PASSWORD RESET*
+━━━━━━━━━━━━━━━━━━
+Hello *${user.name}*!
+
+A request was received to reset your password for TeamFlow.
+
+Your 6-digit Verification Code is:
+👉 *${otp}* 👈
+
+⏱️ Valid for 15 minutes.
+🌐 Reset page: ${resetUrl}
+
+_If you did not request this, please disregard this message._`;
+
+        await sendWhatsAppMessage(user.phone, message);
+        whatsappSent = true;
+      }
+    } catch (botErr) {
+      console.warn('Could not send OTP via WhatsApp bot:', botErr.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: whatsappSent
+        ? `A 6-digit reset code has been sent to your WhatsApp (${maskedPhone}).`
+        : `Reset code generated! (Note: WhatsApp Bot is currently offline — use your account's 6-digit WhatsApp PIN).`,
+      maskedPhone,
+      email: user.email,
+      whatsappSent,
+      // Provide fallback code in response if bot is offline so users are never locked out
+      fallbackOtp: !whatsappSent ? otp : undefined,
+    });
+  } catch (error) {
+    console.error('ForgotPassword error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Server error processing password reset request',
+    });
+  }
+};
+
+// @desc    Reset password using OTP or WhatsApp PIN
+// @route   POST /api/auth/reset-password
+// @access  Public
+exports.resetPassword = async (req, res) => {
+  try {
+    const { identifier, otp, newPassword } = req.body;
+
+    if (!identifier || !otp || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide identifier, 6-digit verification code, and new password.',
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long.',
+      });
+    }
+
+    const trimmed = identifier.trim();
+    let user = null;
+
+    if (trimmed.includes('@')) {
+      user = await User.findOne({ email: trimmed.toLowerCase() }).select('+password +resetPasswordOtp +resetPasswordOtpExpire');
+    } else {
+      const digits = trimmed.replace(/\D/g, '');
+      const searchSuffix = digits.slice(-9);
+      user = await User.findOne({
+        $or: [
+          { phone: digits },
+          { phone: digits.startsWith('0') ? '92' + digits.slice(1) : digits },
+          { phone: { $regex: searchSuffix + '$' } },
+        ],
+      }).select('+password +resetPasswordOtp +resetPasswordOtpExpire');
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User account not found.',
+      });
+    }
+
+    const cleanOtp = otp.toString().trim();
+    const isOtpValid = user.resetPasswordOtp &&
+      user.resetPasswordOtp === cleanOtp &&
+      user.resetPasswordOtpExpire &&
+      new Date(user.resetPasswordOtpExpire).getTime() > Date.now();
+
+    const isPinValid = user.whatsappPin && user.whatsappPin === cleanOtp;
+
+    if (!isOtpValid && !isPinValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired 6-digit verification code.',
+      });
+    }
+
+    // Set new password (pre-save hook will hash it with bcrypt)
+    user.password = newPassword;
+    user.resetPasswordOtp = null;
+    user.resetPasswordOtpExpire = null;
+    user.whatsappPin = Math.floor(100000 + Math.random() * 900000).toString();
+    await user.save();
+
+    // Notify user on WhatsApp if bot is active
+    try {
+      const { isConnected, sendWhatsAppMessage } = require('../bot/whatsappBot');
+      if (isConnected && isConnected()) {
+        const message = `✅ *PASSWORD CHANGED SUCCESSFULLY*
+━━━━━━━━━━━━━━━━━━
+Hello *${user.name}*! Your TeamFlow account password was just successfully reset.
+If you did not make this change, please contact your project leader immediately.`;
+        await sendWhatsAppMessage(user.phone, message);
+      }
+    } catch (e) {
+      // Ignore notification failure
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password reset successfully! You can now log in with your new password.',
+    });
+  } catch (error) {
+    console.error('ResetPassword error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Server error resetting password',
+    });
+  }
+};

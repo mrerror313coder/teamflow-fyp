@@ -134,6 +134,44 @@ You can now use all commands:
 • *!help* — View all available commands`;
   }
 
+  // 3b. PASSWORD RESET COMMAND VIA WHATSAPP (!resetpassword / !forgotpassword)
+  if (lower.startsWith('resetpassword') || lower.startsWith('forgotpassword') || lower.startsWith('forgetpassword')) {
+    const resetUser = await User.findOne({
+      $or: [
+        ...(senderLid ? [{ whatsappLid: senderLid }] : []),
+        ...(cleanPhone ? [
+          { phone: cleanPhone },
+          { phone: cleanPhone.startsWith('0') ? '92' + cleanPhone.slice(1) : cleanPhone },
+          { phone: { $regex: searchDigits + '$' } },
+        ] : []),
+      ],
+    }).select('+resetPasswordOtp +resetPasswordOtpExpire');
+
+    if (!resetUser) {
+      return `❌ *ACCOUNT NOT FOUND*
+━━━━━━━━━━━━━━━━━━
+Your WhatsApp is not linked to any registered TeamFlow account.
+Please register or link your account first via:
+${DASHBOARD_URL}/register`;
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    resetUser.resetPasswordOtp = otp;
+    resetUser.resetPasswordOtpExpire = new Date(Date.now() + 15 * 60 * 1000);
+    await resetUser.save();
+
+    return `🔐 *TEAMFLOW PASSWORD RESET CODE*
+━━━━━━━━━━━━━━━━━━
+Hello *${resetUser.name}*!
+
+Here is your 6-digit verification code to reset your account password:
+👉 *${otp}* 👈
+
+⏱️ This code will expire in 15 minutes.
+🌐 Go to: ${DASHBOARD_URL}/forgot-password
+Enter your email (*${resetUser.email}*) and this 6-digit code to set your new password.`;
+  }
+
   // 4. JOIN COMMAND (!join <inviteCode>) - Allows member to enroll directly from WhatsApp
   if (lower.startsWith('join')) {
     const code = prefix.replace(/^join/i, '').trim().toUpperCase();

@@ -286,6 +286,7 @@ ${userStatus}
 🗑️ *!remove <name/phone>* — Remove a member from project (Leader only)
 🔑 *!join <inviteCode>* — Join a project directly via WhatsApp
 🔗 *!verify <6-digit-pin>* — Securely link WhatsApp using your Dashboard PIN
+🔐 *!resetpassword* — Get an instant code to reset your account password
 ❓ *!help* — Show this command menu
 
 _Note: Project data is restricted to verified group members only._`;
