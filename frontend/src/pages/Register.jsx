@@ -115,7 +115,7 @@ const Register = () => {
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
                 <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                WhatsApp Phone Number (with Country Code)
+                WhatsApp Phone Number
               </label>
               <input
                 type="text"
@@ -123,10 +123,10 @@ const Register = () => {
                 required
                 value={formData.phone}
                 onChange={handleChange}
-                placeholder="e.g. 923001234567"
+                placeholder="e.g. 03058008888 or 923058008888"
                 className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
               />
-              <p className="text-[10px] text-slate-500 mt-1">Used for WhatsApp bot notifications & status updates</p>
+              <p className="text-[10px] text-slate-500 mt-1">Local 03xx numbers are automatically formatted with country code (+92)</p>
             </div>
 
             <div>

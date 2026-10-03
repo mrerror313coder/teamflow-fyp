@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { standardizePhone, maskPhone } = require('../utils/phoneHelper');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'teamflow_super_secret_jwt_key_2026_fyp_98765', {
@@ -29,8 +30,8 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Standardize phone (remove non-digits like +, spaces, dashes)
-    const cleanedPhone = phone.replace(/\D/g, '');
+    // Standardize phone (converts 0305... or +92... to 92305...)
+    const cleanedPhone = standardizePhone(phone);
 
     const Project = require('../models/Project');
     let matchedProject = null;
@@ -113,6 +114,13 @@ exports.login = async (req, res) => {
         success: false,
         message: 'Invalid email or password.',
       });
+    }
+
+    // Auto-migrate phone to international format if needed
+    const stdPhone = standardizePhone(user.phone);
+    if (stdPhone && stdPhone !== user.phone) {
+      user.phone = stdPhone;
+      await user.save();
     }
 
     // Ensure user has a whatsappPin
@@ -226,12 +234,14 @@ exports.forgotPassword = async (req, res) => {
     if (trimmed.includes('@')) {
       user = await User.findOne({ email: trimmed.toLowerCase() }).select('+password +resetPasswordOtp +resetPasswordOtpExpire');
     } else {
-      const digits = trimmed.replace(/\D/g, '');
-      const searchSuffix = digits.slice(-9);
+      const rawDigits = trimmed.replace(/\D/g, '');
+      const stdPhone = standardizePhone(rawDigits);
+      const searchSuffix = rawDigits.slice(-9);
       user = await User.findOne({
         $or: [
-          { phone: digits },
-          { phone: digits.startsWith('0') ? '92' + digits.slice(1) : digits },
+          { phone: stdPhone },
+          { phone: rawDigits },
+          { phone: rawDigits.startsWith('0') ? '92' + rawDigits.slice(1) : rawDigits },
           { phone: { $regex: searchSuffix + '$' } },
         ],
       }).select('+password +resetPasswordOtp +resetPasswordOtpExpire');
@@ -244,17 +254,21 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
+    // Auto-normalize user's phone in database if it was saved as 03... or missing country code
+    const stdPhone = standardizePhone(user.phone);
+    if (stdPhone && stdPhone !== user.phone) {
+      user.phone = stdPhone;
+      await user.save();
+    }
+
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.resetPasswordOtp = otp;
     user.resetPasswordOtpExpire = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
     await user.save();
 
-    // Mask phone number for privacy display (e.g. 92305••••301)
-    const rawPhone = user.phone || '';
-    const maskedPhone = rawPhone.length > 5
-      ? rawPhone.slice(0, 4) + '••••' + rawPhone.slice(-3)
-      : rawPhone;
+    // Mask phone number for privacy display: e.g. 92305••••888
+    const maskedPhone = maskPhone(user.phone);
 
     // Send via WhatsApp bot if connected
     let whatsappSent = false;
@@ -330,12 +344,14 @@ exports.resetPassword = async (req, res) => {
     if (trimmed.includes('@')) {
       user = await User.findOne({ email: trimmed.toLowerCase() }).select('+password +resetPasswordOtp +resetPasswordOtpExpire');
     } else {
-      const digits = trimmed.replace(/\D/g, '');
-      const searchSuffix = digits.slice(-9);
+      const rawDigits = trimmed.replace(/\D/g, '');
+      const stdPhone = standardizePhone(rawDigits);
+      const searchSuffix = rawDigits.slice(-9);
       user = await User.findOne({
         $or: [
-          { phone: digits },
-          { phone: digits.startsWith('0') ? '92' + digits.slice(1) : digits },
+          { phone: stdPhone },
+          { phone: rawDigits },
+          { phone: rawDigits.startsWith('0') ? '92' + rawDigits.slice(1) : rawDigits },
           { phone: { $regex: searchSuffix + '$' } },
         ],
       }).select('+password +resetPasswordOtp +resetPasswordOtpExpire');
@@ -346,6 +362,12 @@ exports.resetPassword = async (req, res) => {
         success: false,
         message: 'User account not found.',
       });
+    }
+
+    // Auto-normalize phone
+    const stdUserPhone = standardizePhone(user.phone);
+    if (stdUserPhone && stdUserPhone !== user.phone) {
+      user.phone = stdUserPhone;
     }
 
     const cleanOtp = otp.toString().trim();

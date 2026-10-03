@@ -27,18 +27,22 @@ const getBotStatus = () => ({
 
 const getQrBuffer = () => currentQRBuffer;
 
+const { standardizePhone } = require('../utils/phoneHelper');
+
 const isConnected = () => connectionStatus === 'connected' && !!sock;
 
 const sendWhatsAppMessage = async (phoneNumber, text) => {
   if (!sock || connectionStatus !== 'connected') {
-    console.log(`[WhatsApp Mock Dispatch] To: ${phoneNumber} | Message: ${text.slice(0, 80)}...`);
+    const stdNumber = standardizePhone(phoneNumber);
+    console.log(`[WhatsApp Mock Dispatch] To: +${stdNumber || phoneNumber} | Message: ${text.slice(0, 80)}...`);
     return false;
   }
 
   try {
-    const cleanNumber = phoneNumber.replace(/\D/g, '');
+    const cleanNumber = standardizePhone(phoneNumber);
     const jid = `${cleanNumber}@s.whatsapp.net`;
     await sock.sendMessage(jid, { text });
+    console.log(`✅ WhatsApp message delivered to +${cleanNumber}`);
     return true;
   } catch (error) {
     console.error(`Failed to send WhatsApp message to ${phoneNumber}:`, error.message);
@@ -51,7 +55,7 @@ const sendWhatsAppMessage = async (phoneNumber, text) => {
  */
 const requestPairingCode = async (phoneNumber) => {
   if (!phoneNumber) throw new Error('Phone number is required');
-  const cleanPhone = phoneNumber.replace(/\D/g, '');
+  const cleanPhone = standardizePhone(phoneNumber);
 
   if (connectionStatus === 'connected') {
     throw new Error('WhatsApp Bot is already connected!');

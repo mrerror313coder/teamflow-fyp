@@ -17,6 +17,7 @@ const {
 } = require('./aiHandler');
 const { calculateProjectProgress } = require('../utils/progressCalc');
 const { notifyTaskAssigned } = require('../utils/notifications');
+const { standardizePhone } = require('../utils/phoneHelper');
 
 const DASHBOARD_URL = process.env.APP_URL || process.env.FRONTEND_URL || 'https://teamflow-fyp.onrender.com';
 
@@ -60,10 +61,21 @@ const handleIncomingMessage = async (senderPhone, rawMessage, options = {}) => {
     user = await User.findOne({ role: 'leader' });
   }
 
-  // If user is matched and we have their LID, save it so future messages match instantly!
-  if (user && senderLid && user.whatsappLid !== senderLid) {
-    user.whatsappLid = senderLid;
-    await user.save();
+  // If user is matched, save LID and ensure phone is normalized to international format
+  if (user) {
+    let modified = false;
+    if (senderLid && user.whatsappLid !== senderLid) {
+      user.whatsappLid = senderLid;
+      modified = true;
+    }
+    const std = standardizePhone(user.phone);
+    if (std && std !== user.phone) {
+      user.phone = std;
+      modified = true;
+    }
+    if (modified) {
+      await user.save();
+    }
   }
 
   // 2. HELP COMMAND (!help) - Publicly viewable

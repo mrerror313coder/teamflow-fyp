@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Task = require('../models/Task');
 const { calculateProjectProgress } = require('../utils/progressCalc');
 const { exportProjectToCsv, syncToGoogleSheet } = require('../utils/sheetSync');
+const { standardizePhone } = require('../utils/phoneHelper');
 
 const crypto = require('crypto');
 
@@ -167,8 +168,13 @@ exports.addMember = async (req, res) => {
     } else if (email) {
       userToAdd = await User.findOne({ email: email.trim().toLowerCase() });
     } else if (phone) {
-      const cleanPhone = phone.replace(/\D/g, '');
-      userToAdd = await User.findOne({ phone: { $regex: new RegExp(cleanPhone.slice(-9) + '$') } });
+      const cleanPhone = standardizePhone(phone);
+      userToAdd = await User.findOne({
+        $or: [
+          { phone: cleanPhone },
+          { phone: { $regex: new RegExp(cleanPhone.slice(-9) + '$') } },
+        ],
+      });
     }
 
     if (!userToAdd) {
